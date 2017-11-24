@@ -1,9 +1,9 @@
 #' Add transactions to a portfolio.
-#' 
-#' When a trade or adjustment is made to the Portfolio, the addTxn function 
-#' calculates the value and average cost of the transaction,  the change in 
-#' position, the resulting positions average cost, and any realized profit 
-#' or loss (net of fees) from the transaction. Then it stores the transaction 
+#'
+#' When a trade or adjustment is made to the Portfolio, the addTxn function
+#' calculates the value and average cost of the transaction,  the change in
+#' position, the resulting positions average cost, and any realized profit
+#' or loss (net of fees) from the transaction. Then it stores the transaction
 #' and calculations in the Portfolio object.
 #'
 #' Fees are indicated as negative values and will be
@@ -33,13 +33,13 @@
 #' adding them one at a time. The \code{TxnData} object must
 #' have "TxnQty" and "TxnPrice" columns, while the "TxnFees"
 #' column is optional.
-#' 
-#' If \code{TxnFees} is the name of a function, the function 
+#'
+#' If \code{TxnFees} is the name of a function, the function
 #' will be called with \code{TxnFees(TxnQty, TxnPrice, Symbol)}
-#' so a user supplied fee function must at the very least take 
-#' dots to avoid an error. We have chosen not to use named arguments 
-#' to reduce issues from user-supplied fee functions. 
-#' 
+#' so a user supplied fee function must at the very least take
+#' dots to avoid an error. We have chosen not to use named arguments
+#' to reduce issues from user-supplied fee functions.
+#'
 #' @param Portfolio  A portfolio name that points to a portfolio object structured with \code{initPortf()}
 #' @param Symbol An instrument identifier for a symbol included in the portfolio, e.g., "IBM"
 #' @param TxnDate  Transaction date as ISO 8601, e.g., '2008-09-01' or '2010-01-05 09:54:23.12345'
@@ -52,7 +52,7 @@
 #' @param verbose If TRUE (default) the function prints the elements of the transaction in a line to the screen, e.g., "2007-01-08 IBM 50 @@ 77.6". Suppress using FALSE.
 #' @param eps value to add to force unique indices
 #' @param TxnData  An xts object containing all required txn fields (for addTxns)
-#' @note 
+#' @note
 #' Transactions must be added in date-time order.  All per-transaction
 #' accounting is calculated when appending transactions to the 'txn' table.
 #' Adding transactions out of order will cause incorrect accounting, and is
@@ -60,24 +60,27 @@
 #' error if called with a \code{TxnDate} (or an xts index value) before the
 #' last date in the 'txn' table.
 #'
-#' The addTxn function will eventually also handle other transaction types, 
-#' such as adjustments for corporate actions or expire/assign for options. 
-#' See \code{\link{addDiv}} 
+#' The addTxn function will eventually also handle other transaction types,
+#' such as adjustments for corporate actions or expire/assign for options.
+#' See \code{\link{addDiv}}
 #'
 #' @seealso \code{\link{addTxns}}, \code{\link{pennyPerShare}}, \code{\link{initPortf}}
 #' @author Peter Carl, Brian G. Peterson
 #' @export addTxn
 #' @export addTxns
 addTxn <- function(Portfolio, Symbol, TxnDate, TxnQty, TxnPrice, ..., TxnFees=0, allowRebates=FALSE, ConMult=NULL, verbose=TRUE, eps=1e-06)
-{ 
+{
     pname <- Portfolio
     #If there is no table for the symbol then create a new one
     if(is.null(.getPortfolio(pname)$symbols[[Symbol]]))
         addPortfInstr(Portfolio=pname, symbols=Symbol)
     Portfolio <- .getPortfolio(pname)
 
+    # Some debugging help
+    message(TxnDate, ": ", TxnQty, ": ", TxnPrice)
+
     PrevPosQty = getPosQty(pname, Symbol, TxnDate)
-    
+
     if(!inherits(TxnDate, "POSIXct")) {
       if(inherits(TxnDate, "Date"))
         TxnDate <- as.POSIXct(TxnDate, tz="UTC")
@@ -98,27 +101,28 @@ addTxn <- function(Portfolio, Symbol, TxnDate, TxnQty, TxnPrice, ..., TxnFees=0,
     }
     # Compute transaction fees if a function was supplied
     if (is.function(TxnFees)) {
-      txnfees <- TxnFees(TxnQty, TxnPrice, Symbol) 
+      txnfees <- TxnFees(TxnQty, TxnPrice, Symbol)
     } else {
       txnfees<- as.numeric(TxnFees)
     }
-    
+
     if(is.null(txnfees) || is.na(txnfees))
         txnfees <- 0
     if(txnfees>0 && !isTRUE(allowRebates))
         stop('Positive Transaction Fees should only be used in the case of broker/exchange rebates for TxnFees ',TxnFees,'. See Documentation.')
-    
+
+
     # split transactions that would cross through zero
     if(PrevPosQty!=0 && sign(PrevPosQty+TxnQty)!=sign(PrevPosQty) && PrevPosQty!=-TxnQty){
         txnFeeQty=txnfees/abs(TxnQty) # calculate fees pro-rata by quantity
-        addTxn(Portfolio=pname, Symbol=Symbol, TxnDate=TxnDate, TxnQty=-PrevPosQty, TxnPrice=TxnPrice, ..., 
+        addTxn(Portfolio=pname, Symbol=Symbol, TxnDate=TxnDate, TxnQty=-PrevPosQty, TxnPrice=TxnPrice, ...,
                 TxnFees = txnFeeQty*abs(PrevPosQty), ConMult = ConMult, verbose = verbose, eps=eps)
         TxnDate=TxnDate+2*eps #transactions need unique timestamps, so increment a bit
         TxnQty=TxnQty+PrevPosQty
         PrevPosQty=0
         txnfees=txnFeeQty*abs(TxnQty+PrevPosQty)
     }
-    
+
     if(is.null(ConMult) | !hasArg(ConMult)){
         tmp_instr<-try(getInstrument(Symbol), silent=TRUE)
         if(inherits(tmp_instr,"try-error") | !is.instrument(tmp_instr)){
@@ -141,7 +145,7 @@ addTxn <- function(Portfolio, Symbol, TxnDate, TxnQty, TxnPrice, ..., TxnFees=0,
     PrevPosAvgCost = .getPosAvgCost(pname, Symbol, TxnDate)
     PosAvgCost = .calcPosAvgCost(PrevPosQty, PrevPosAvgCost, TxnValue, PosQty, ConMult)
 
-	
+
     # Calculate any realized profit or loss (net of fees) from the transaction
     GrossTxnRealizedPL = TxnQty * ConMult * (PrevPosAvgCost - TxnAvgCost)
 
@@ -150,7 +154,7 @@ addTxn <- function(Portfolio, Symbol, TxnDate, TxnQty, TxnPrice, ..., TxnFees=0,
   	# if previous position is negative and position is smaller, RealizedPL =0
   	if(abs(PrevPosQty) < abs(PosQty) | (PrevPosQty == 0))
   		GrossTxnRealizedPL = 0
-	
+
 	  NetTxnRealizedPL = GrossTxnRealizedPL + txnfees
 
     # Store the transaction and calculations
@@ -202,7 +206,7 @@ addTxns<- function(Portfolio, Symbol, TxnData , verbose=FALSE, ..., ConMult=NULL
             ConMult<-1
         } else {
             ConMult<-tmp_instr$multiplier
-        }  
+        }
     }
 
     # initialize new transaction object
@@ -229,11 +233,11 @@ addTxns<- function(Portfolio, Symbol, TxnData , verbose=FALSE, ..., ConMult=NULL
     } else {
       NewTxns$Txn.Fees <- 0
     }
-  
+
     if(any(NewTxns$Txn.Fees > 0) && !isTRUE(allowRebates)){
       stop('Positive Transaction Fees should only be used in the case of broker/exchange rebates. See Documentation.')
     }
-  
+
     # split transactions that would cross through zero
     Pos <- drop(cumsum(NewTxns$Txn.Qty))
     Pos <- merge(Qty=Pos, PrevQty=lag(Pos))
@@ -278,15 +282,15 @@ addTxns<- function(Portfolio, Symbol, TxnData , verbose=FALSE, ..., ConMult=NULL
     NewTxns$Con.Mult <- ConMult
 
     # update portfolio with new transactions
-    Portfolio$symbols[[Symbol]]$txn <- rbind(Portfolio$symbols[[Symbol]]$txn, NewTxns) 
+    Portfolio$symbols[[Symbol]]$txn <- rbind(Portfolio$symbols[[Symbol]]$txn, NewTxns)
 
     if(verbose) print(NewTxns)
 }
 
 #' Add cash dividend transactions to a portfolio.
-#' 
+#'
 #' Adding a cash dividend does not affect position quantity, like a split would.
-#' 
+#'
 #' @param Portfolio  A portfolio name that points to a portfolio object structured with \code{\link{initPortf}}.
 #' @param Symbol An instrument identifier for a symbol included in the portfolio, e.g., IBM.
 #' @param TxnDate  Transaction date as ISO 8601, e.g., '2008-09-01' or '2010-01-05 09:54:23.12345'.
@@ -298,9 +302,9 @@ addTxns<- function(Portfolio, Symbol, TxnData , verbose=FALSE, ..., ConMult=NULL
 #' @export
 #' @note
 #' # TODO add TxnTypes to $txn table
-#' 
-#' # TODO add AsOfDate 
-#' 
+#'
+#' # TODO add AsOfDate
+#'
 addDiv <- function(Portfolio, Symbol, TxnDate, DivPerShare, ..., TxnFees=0, ConMult=NULL, verbose=TRUE)
 { # @author Peter Carl
     pname <- Portfolio
@@ -320,7 +324,7 @@ addDiv <- function(Portfolio, Symbol, TxnDate, DivPerShare, ..., TxnFees=0, ConM
     }
 
     # FUNCTION
-    # 
+    #
     TxnQty = 0
     TxnPrice = 0
 #     TxnType = "Dividend"
